@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package moodpredictor;
+
+// Representa las características musicales de una canción
+message SongFeatures {
+  string song_id = 1; // Opcional, pero útil para rastreo
+  double tempo = 2;
+  double energy = 3;
+  double valence = 4;
+  double danceability = 5;
+  // Añade otros campos que listaste si son necesarios para el modelo:
+  // double loudness = 6;
+  // double speechiness = 7;
+  // double acousticness = 8;
+  // double instrumentalness = 9;
+  // double liveness = 10;
+}
+
+// Solicitud para predecir el estado de ánimo global del usuario
+// basado en una lista de canciones
+message PredictUserMoodRequest {
+  repeated SongFeatures song_features = 1;
+}
+
+// Respuesta de la predicción del estado de ánimo global del usuario
+message PredictUserMoodResponse {
+  string global_mood = 1; // Ej: "Happy", "Sad", "Energetic", "Relaxed"
+}
+
+// Definición del servicio gRPC
+service MoodPredictorService {
+  // Predice el estado de ánimo global de un usuario basado en sus canciones
+  rpc PredictUserMood(PredictUserMoodRequest) returns (PredictUserMoodResponse);
+}
