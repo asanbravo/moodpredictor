@@ -1,3 +1,4 @@
+# language: en
 Feature: User Mood Prediction
   As a client of the MoodPredictor API,
   I want to get a global user mood prediction
