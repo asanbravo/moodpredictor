@@ -47,7 +47,6 @@ jobs:
 
     - name: Patch gRPC Service Stub Import
       run: |
-        set -x # Muestra comandos
         source venv/bin/activate
         GRPC_STUB_FILE="app/mood_predictor_pb2_grpc.py"
         if [ -f "$GRPC_STUB_FILE" ]; then
@@ -101,18 +100,12 @@ jobs:
       run: |
         source venv/bin/activate
         export PYTHONPATH="./app:."
-        echo "PYTHONPATH set to: $PYTHONPATH"
-        echo "Running Python sys.path and os debug info for Unit Tests..."
-        python -c "import sys; print('sys.path for Unit Tests:', sys.path); import os; print('CWD for Unit Tests:', os.getcwd()); print('Contents of ./app for Unit Tests:', os.listdir('./app'))"
         python -m unittest discover -s app/tests/unit -p "test_*.py"
 
     - name: Run Acceptance Tests (Behave)
       run: |
         source venv/bin/activate
         export PYTHONPATH="./app:."
-        echo "PYTHONPATH set to: $PYTHONPATH"
-        echo "Running Python sys.path and os debug info for Behave step..."
-        python -c "import sys; print('sys.path for Behave step:', sys.path); import os; print('CWD for Behave step:', os.getcwd()); print('Contents of ./app for Behave step:', os.listdir('./app'))"
         echo "Iniciando servidor gRPC en segundo plano..."
         python app/main.py &
         SERVER_PID=$!
