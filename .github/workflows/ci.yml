@@ -1,0 +1,122 @@
+name: MoodPredictor CI
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"] # Using latest stable version
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        PY_EXE="python"
+        VENV_MODULE="venv"
+        $PY_EXE -m $VENV_MODULE venv
+        source venv/bin/activate
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+
+    - name: Generate gRPC stubs
+      run: |
+        source venv/bin/activate
+        echo "Generando stubs gRPC..."
+        python -m grpc_tools.protoc \
+            -I./proto \
+            --python_out=./app \
+            --pyi_out=./app \
+            --grpc_python_out=./app \
+            ./proto/mood_predictor.proto
+        echo "Stubs generados. Verificando existencia:"
+        ls -l app/mood_predictor_pb2.py app/mood_predictor_pb2_grpc.py app/mood_predictor_pb2.pyi
+        ls -l app/mood_predictor_pb2_grpc.pyi || echo "INFO: mood_predictor_pb2_grpc.pyi no fue generado (esto puede ser normal)."
+
+    - name: Patch gRPC Service Stub Import
+      run: |
+        source venv/bin/activate
+        GRPC_STUB_FILE="app/mood_predictor_pb2_grpc.py"
+        if [ -f "$GRPC_STUB_FILE" ]; then
+          echo "Parcheando import en $GRPC_STUB_FILE..."
+          # Usar una copia temporal para sed -i en algunos entornos de CI o sed que no soportan -i directamente sin backup
+          cp "$GRPC_STUB_FILE" "$GRPC_STUB_FILE.tmp"
+          sed "s/^import mood_predictor_pb2 as mood__predictor__pb2/from . import mood_predictor_pb2 as mood__predictor__pb2/" "$GRPC_STUB_FILE.tmp" > "$GRPC_STUB_FILE"
+          rm "$GRPC_STUB_FILE.tmp"
+          echo "Import parcheado. Verificando el cambio:"
+          grep "from . import mood_predictor_pb2" "$GRPC_STUB_FILE" || echo "VERIFICACIÓN FALLIDA: El import no parece estar parcheado."
+        else
+          echo "ADVERTENCIA: Archivo $GRPC_STUB_FILE no encontrado para parchear."
+        fi
+
+    - name: Format Generated gRPC Stubs with Black
+      run: |
+        source venv/bin/activate
+        echo "Attempting to format generated gRPC stub files (.py and .pyi) if they exist..."
+        [ -f app/mood_predictor_pb2.py ] && black app/mood_predictor_pb2.py || echo "INFO: app/mood_predictor_pb2.py not found or no formatting needed."
+        [ -f app/mood_predictor_pb2_grpc.py ] && black app/mood_predictor_pb2_grpc.py || echo "INFO: app/mood_predictor_pb2_grpc.py not found or no formatting needed."
+        [ -f app/mood_predictor_pb2.pyi ] && black app/mood_predictor_pb2.pyi || echo "INFO: app/mood_predictor_pb2.pyi not found or no formatting needed."
+        [ -f app/mood_predictor_pb2_grpc.pyi ] && black app/mood_predictor_pb2_grpc.pyi || echo "INFO: app/mood_predictor_pb2_grpc.pyi not found or no formatting needed."
+
+    - name: Lint with Black
+      run: |
+        source venv/bin/activate
+        black --check .
+
+    - name: Ensure dummy dataset for model training (if not in repo)
+      run: |
+        source venv/bin/activate
+        if [ ! -f songs_dataset.csv ]; then
+          echo "songs_dataset.csv no encontrado. Creando dataset dummy para CI..."
+          python -c "import pandas as pd; import numpy as np; data = []; mood_names = ['Happy', 'Sad', 'Energetic', 'Relaxed']; num_samples_per_mood = 10; \
+          for mood_val in mood_names: \
+              for j in range(num_samples_per_mood): \
+                  sid = f'{mood_val.lower()}_track{j+1}'; \
+                  if mood_val == 'Happy': t,e,v,d = np.random.uniform(100,140),np.random.uniform(0.7,1.0),np.random.uniform(0.7,1.0),np.random.uniform(0.6,0.9); \
+                  elif mood_val == 'Sad': t,e,v,d = np.random.uniform(60,100),np.random.uniform(0.2,0.5),np.random.uniform(0.0,0.4),np.random.uniform(0.2,0.5); \
+                  elif mood_val == 'Energetic': t,e,v,d = np.random.uniform(120,160),np.random.uniform(0.8,1.0),np.random.uniform(0.5,0.9),np.random.uniform(0.7,1.0); \
+                  else: t,e,v,d = np.random.uniform(70,110),np.random.uniform(0.3,0.6),np.random.uniform(0.4,0.8),np.random.uniform(0.3,0.6); \
+                  data.append([sid, t, e, v, d, mood_val]); \
+          df = pd.DataFrame(data, columns=['song_id', 'tempo', 'energy', 'valence', 'danceability', 'mood']); \
+          df.to_csv('songs_dataset.csv', index=False); \
+          print('Dataset dummy creado.')"
+        else
+          echo "songs_dataset.csv encontrado."
+        fi
+
+    - name: Run Unit Tests
+      run: |
+        source venv/bin/activate
+        export PYTHONPATH="./app:."
+        python -m unittest discover -s app/tests/unit -p "test_*.py"
+
+    - name: Run Acceptance Tests (Behave)
+      run: |
+        source venv/bin/activate
+        export PYTHONPATH="./app:."
+        echo "Iniciando servidor gRPC en segundo plano..."
+        python app/main.py &
+        SERVER_PID=$!
+        echo "Servidor PID: $SERVER_PID"
+        sleep 5
+        echo "Ejecutando pruebas de Behave..."
+        behave app/tests/acceptance/predict_mood.feature
+        echo "Pruebas de Behave completadas. Deteniendo servidor..."
+        kill $SERVER_PID
+        if wait $SERVER_PID; then
+            echo "Servidor detenido limpiamente."
+        else
+            echo "Servidor no se detuvo limpiamente o ya estaba detenido (puede ser normal si la prueba falló y mató el servidor)."
+        fi
