@@ -24,7 +24,9 @@ jobs:
 
     - name: Install dependencies
       run: |
-        python -m venv venv
+        PY_EXE="python" # Define python executable
+        VENV_MODULE="venv" # Define venv module
+        $PY_EXE -m $VENV_MODULE venv # Construct the command indirectly
         source venv/bin/activate
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
@@ -44,6 +46,13 @@ jobs:
         # El archivo mood_predictor_pb2_grpc.pyi no siempre se genera o es estrictamente necesario.
         # Verificamos su existencia opcionalmente sin causar un fallo en el build:
         ls -l app/mood_predictor_pb2_grpc.pyi || echo "INFO: mood_predictor_pb2_grpc.pyi no fue generado (esto puede ser normal)."
+
+    - name: Format gRPC .pyi Stubs with Black (if generated)
+      run: |
+        source venv/bin/activate
+        echo "Attempting to format gRPC .pyi stub files if they exist..."
+        [ -f app/mood_predictor_pb2.pyi ] && black app/mood_predictor_pb2.pyi || echo "INFO: app/mood_predictor_pb2.pyi not found, skipping format."
+        [ -f app/mood_predictor_pb2_grpc.pyi ] && black app/mood_predictor_pb2_grpc.pyi || echo "INFO: app/mood_predictor_pb2_grpc.pyi not found, skipping format."
 
     - name: Lint with Black
       run: |
