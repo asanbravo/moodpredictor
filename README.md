@@ -155,3 +155,4 @@ Ejemplo de respuesta si la moda es "Happy":
   "global_mood": "Happy"
 }
 ```
+<!-- Trigger CI -->
