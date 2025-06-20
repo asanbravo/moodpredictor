@@ -12,6 +12,7 @@ def step_impl_server_running(context):
     pass
 
 
+# Reescribir este string de step cuidadosamente:
 @when("I send a request to predict the user's mood with the following songs:")
 def step_impl_predict_with_songs(context):
     print(
@@ -19,6 +20,8 @@ def step_impl_predict_with_songs(context):
     )
     # if hasattr(context, 'table') and context.table:
     #    print(f"DEBUG CI TABLE: Rows: {len(context.table.rows)}, Headings: {context.table.headings}")
+    #    for row in context.table:
+    #        print(f"DEBUG CI TABLE ROW: {dict(row)}")
     # else:
     #    print("DEBUG CI TABLE: No table found in context or table is empty.")
     pass
