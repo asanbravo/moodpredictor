@@ -1,3 +1,5 @@
+[![Estado del Workflow CI](https://github.com/YOUR_GITHUB_USERNAME_OR_ORG/YOUR_REPOSITORY_NAME/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_GITHUB_USERNAME_OR_ORG/YOUR_REPOSITORY_NAME/actions/workflows/ci.yml)
+
 # MoodPredictor AI
 
 Proyecto para predecir el estado de ánimo global de un usuario basado en las características musicales de una lista de sus canciones, utilizando gRPC y un modelo de Machine Learning (Random Forest).

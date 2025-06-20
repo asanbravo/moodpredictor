@@ -1,0 +1,137 @@
+name: MoodPredictor CI
+
+on:
+  push:
+    branches: [ "main", "develop" ] # O las ramas que uses para PRs e integración
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11"] # Puedes ajustar las versiones
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt # Para black, behave, etc.
+
+    - name: Generate gRPC stubs
+      run: |
+        source venv/bin/activate
+        echo "Generando stubs gRPC..."
+        python -m grpc_tools.protoc \
+            -I./proto \
+            --python_out=./app \
+            --pyi_out=./app \
+            --grpc_python_out=./app \
+            ./proto/mood_predictor.proto
+        echo "Stubs generados. Verificando existencia:"
+        ls -l app/mood_predictor_pb2.py app/mood_predictor_pb2_grpc.py
+        # Verificar también los .pyi si son críticos para tu setup de linting/type checking
+        ls -l app/mood_predictor_pb2.pyi app/mood_predictor_pb2_grpc.pyi
+
+
+    - name: Lint with Black
+      run: |
+        source venv/bin/activate
+        black --check . # --check no modifica archivos, solo verifica
+
+    # El modelo y dataset se generan/cargan como parte de la inicialización de SklearnMoodModel
+    # Si no existen, SklearnMoodModel los crea/entrena usando el script anterior.
+    # En un CI real, podrías descargar un dataset predefinido o un modelo pre-entrenado
+    # desde un almacenamiento de artefactos para mayor velocidad y consistencia.
+    # Por ahora, se asume que el proceso actual es suficiente y está cubierto por SklearnMoodModel.
+    # Si el entrenamiento falla en CI (ej. por falta de datos), el paso de SklearnMoodModel
+    # debería indicarlo (ej. self.model será None) y las pruebas que dependan de él fallarían.
+
+    # Generar el dataset y el modelo antes de las pruebas
+    # Se asume que `songs_dataset.csv` y `mood_model.joblib` se necesitan para las pruebas.
+    # El script _generate_and_train.py fue eliminado, pero su lógica
+    # está ahora (parcialmente) en SklearnMoodModel o se espera que esté en el repo.
+    # Para CI, es mejor tener el dataset en el repo o descargarlo.
+    # Y el modelo, o se entrena siempre, o se descarga.
+    # La clase SklearnMoodModel actual intentará entrenar si mood_model.joblib no existe.
+    # Asegurémonos que el dataset songs_dataset.csv está disponible.
+    # Si el dataset se genera dinámicamente y no está en el repo, este paso fallaría.
+    # Por ahora, el script de la subtarea anterior lo creaba.
+    # Si no está, SklearnMoodModel fallará al intentar entrenar.
+    # Vamos a añadir un paso para crear un dataset dummy si no existe,
+    # para asegurar que el modelo pueda ser "entrenado" en CI.
+    - name: Ensure dummy dataset for model training (if not in repo)
+      run: |
+        source venv/bin/activate
+        if [ ! -f songs_dataset.csv ]; then
+          echo "songs_dataset.csv no encontrado. Creando dataset dummy para CI..."
+          python -c "import pandas as pd; import numpy as np; data = []; mood_names = ['Happy', 'Sad', 'Energetic', 'Relaxed']; num_samples_per_mood = 10; \
+          for mood_val in mood_names: \
+              for j in range(num_samples_per_mood): \
+                  sid = f'{mood_val.lower()}_track{j+1}'; \
+                  if mood_val == 'Happy': t,e,v,d = np.random.uniform(100,140),np.random.uniform(0.7,1.0),np.random.uniform(0.7,1.0),np.random.uniform(0.6,0.9); \
+                  elif mood_val == 'Sad': t,e,v,d = np.random.uniform(60,100),np.random.uniform(0.2,0.5),np.random.uniform(0.0,0.4),np.random.uniform(0.2,0.5); \
+                  elif mood_val == 'Energetic': t,e,v,d = np.random.uniform(120,160),np.random.uniform(0.8,1.0),np.random.uniform(0.5,0.9),np.random.uniform(0.7,1.0); \
+                  else: t,e,v,d = np.random.uniform(70,110),np.random.uniform(0.3,0.6),np.random.uniform(0.4,0.8),np.random.uniform(0.3,0.6); \
+                  data.append([sid, t, e, v, d, mood_val]); \
+          df = pd.DataFrame(data, columns=['song_id', 'tempo', 'energy', 'valence', 'danceability', 'mood']); \
+          df.to_csv('songs_dataset.csv', index=False); \
+          print('Dataset dummy creado.')"
+        else
+          echo "songs_dataset.csv encontrado."
+        fi
+        # El modelo se entrenará automáticamente por SklearnMoodModel si no existe mood_model.joblib
+
+    - name: Run Unit Tests
+      run: |
+        source venv/bin/activate
+        # Asegurar que PYTHONPATH está configurado para que los tests encuentren 'app'
+        export PYTHONPATH=.
+        python -m unittest discover -s app/tests/unit -p "test_*.py"
+
+    # Las pruebas de aceptación (Behave) requieren un servidor gRPC en ejecución.
+    # Se pueden ejecutar en CI de varias maneras:
+    # 1. Iniciar el servidor en segundo plano, ejecutar Behave, luego detener el servidor.
+    # 2. Usar Docker Compose para orquestar el servidor y las pruebas.
+    # 3. Mockear la capa gRPC (menos ideal para pruebas de aceptación puras).
+    # Por simplicidad, aquí se inicia el servidor en segundo plano.
+    - name: Run Acceptance Tests (Behave)
+      run: |
+        source venv/bin/activate
+        export PYTHONPATH=.
+        echo "Iniciando servidor gRPC en segundo plano..."
+        python app/main.py &
+        SERVER_PID=$!
+        echo "Servidor PID: $SERVER_PID"
+        # Esperar un momento para que el servidor se inicie completamente
+        sleep 5
+        echo "Ejecutando pruebas de Behave..."
+        behave app/tests/acceptance/predict_mood.feature
+        echo "Pruebas de Behave completadas. Deteniendo servidor..."
+        kill $SERVER_PID
+        # Esperar a que el proceso termine y verificar
+        if wait $SERVER_PID; then
+            echo "Servidor detenido limpiamente."
+        else
+            echo "Servidor no se detuvo limpiamente o ya estaba detenido (puede ser normal si la prueba falló y mató el servidor)."
+        fi
+        # Si el servidor falla al iniciar o durante las pruebas, 'behave' debería fallar y, por lo tanto, el job.
+        # 'kill' podría fallar si el servidor ya se detuvo (ej. por un error interno),
+        # por lo que no necesariamente queremos que este paso falle si kill no tiene éxito.
+        # Sin embargo, si `behave` falla, el workflow fallará, que es el comportamiento deseado.
+      # Consideraciones adicionales para CI:
+      # - Cacheo de dependencias para acelerar las ejecuciones.
+      # - Publicación de resultados de pruebas.
+      # - Notificaciones.
+      # - Manejo de secretos si la aplicación los necesitara.
