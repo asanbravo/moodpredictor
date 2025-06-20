@@ -1,50 +1,24 @@
 from behave import given, when, then, step
 import grpc
-import os  # Para construir paths si es necesario
+import os
 
-# Intentar importar los stubs gRPC desde la ubicación esperada
-# Esto asume que 'behave' se ejecuta desde la raíz del proyecto, y PYTHONPATH incluye la raíz.
-try:
-    from app import mood_predictor_pb2_grpc
-    from app import mood_predictor_pb2
-except ImportError as e:
-    print(
-        f"ADVERTENCIA (Behave Steps): No se pudieron importar los stubs gRPC: {e}. Las pruebas de aceptación fallarán si se ejecutan."
-    )
-
-    # Definir placeholders para que el archivo de pasos al menos se cargue y no de error de sintaxis
-    class _PlaceholderStub:
-        @staticmethod
-        def MoodPredictorServiceStub(channel):
-            raise RuntimeError("Stubs gRPC no importados correctamente.")
-
-    class _PlaceholderMessages:
-        @staticmethod
-        def SongFeatures(**kwargs):
-            raise RuntimeError("Stubs gRPC no importados correctamente.")
-
-        @staticmethod
-        def PredictUserMoodRequest(song_features=None):
-            raise RuntimeError("Stubs gRPC no importados correctamente.")
-
-    mood_predictor_pb2_grpc = _PlaceholderStub()
-    mood_predictor_pb2 = _PlaceholderMessages()
+# Imports directos de gRPC stubs
+from app import mood_predictor_pb2_grpc
+from app import mood_predictor_pb2
 
 
 @given("el servidor MoodPredictor está en ejecución")
 def step_impl_server_running(context):
     context.server_address = os.getenv("GRPC_SERVER_ADDRESS", "localhost:50051")
     print(f"Asumiendo que el servidor gRPC está en {context.server_address}")
-    # Se podría añadir un intento de conexión simple aquí como un health check básico.
     try:
         with grpc.insecure_channel(context.server_address) as channel:
-            grpc.channel_ready_future(channel).result(timeout=1)  # Timeout de 1 segundo
+            grpc.channel_ready_future(channel).result(timeout=1)
         print("Conexión de prueba al servidor exitosa.")
     except grpc.FutureTimeoutError:
         print(
             "ADVERTENCIA: No se pudo conectar al servidor gRPC en el health check inicial."
         )
-        # Podríamos decidir abortar aquí con context.abort() si la conexión es vital para continuar.
         # context.abort("El servidor gRPC no está disponible.")
 
 
@@ -75,8 +49,10 @@ def step_impl_predict_with_songs(context):
         context.response = None
         context.grpc_error = e
         print(f"Error gRPC capturado: Code={e.code()} Details='{e.details()}'")
-    except RuntimeError as e:  # Captura el error de stubs no cargados
-        context.abort(f"Fallo crítico en el step debido a stubs no cargados: {e}")
+    except RuntimeError as e:
+        context.abort(
+            f"Fallo crítico en el step debido a stubs no cargados o error de runtime: {e}"
+        )
 
 
 @when("envío una solicitud para predecir el mood del usuario sin ninguna canción")
@@ -96,8 +72,10 @@ def step_impl_predict_no_songs(context):
         print(
             f"Error gRPC capturado (esperado para lista vacía): Code={e.code()} Details='{e.details()}'"
         )
-    except RuntimeError as e:  # Captura el error de stubs no cargados
-        context.abort(f"Fallo crítico en el step debido a stubs no cargados: {e}")
+    except RuntimeError as e:
+        context.abort(
+            f"Fallo crítico en el step debido a stubs no cargados o error de runtime: {e}"
+        )
 
 
 @then(
