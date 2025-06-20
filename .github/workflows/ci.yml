@@ -45,6 +45,23 @@ jobs:
         ls -l app/mood_predictor_pb2.py app/mood_predictor_pb2_grpc.py app/mood_predictor_pb2.pyi
         ls -l app/mood_predictor_pb2_grpc.pyi || echo "INFO: mood_predictor_pb2_grpc.pyi no fue generado (esto puede ser normal)."
 
+    - name: Patch gRPC Service Stub Import
+      run: |
+        set -x # Muestra comandos
+        source venv/bin/activate
+        GRPC_STUB_FILE="app/mood_predictor_pb2_grpc.py"
+        if [ -f "$GRPC_STUB_FILE" ]; then
+          echo "Parcheando import en $GRPC_STUB_FILE..."
+          # Usar una copia temporal para sed -i en algunos entornos de CI o sed que no soportan -i directamente sin backup
+          cp "$GRPC_STUB_FILE" "$GRPC_STUB_FILE.tmp"
+          sed "s/^import mood_predictor_pb2 as mood__predictor__pb2/from . import mood_predictor_pb2 as mood__predictor__pb2/" "$GRPC_STUB_FILE.tmp" > "$GRPC_STUB_FILE"
+          rm "$GRPC_STUB_FILE.tmp"
+          echo "Import parcheado. Verificando el cambio:"
+          grep "from . import mood_predictor_pb2" "$GRPC_STUB_FILE" || echo "VERIFICACIÓN FALLIDA: El import no parece estar parcheado."
+        else
+          echo "ADVERTENCIA: Archivo $GRPC_STUB_FILE no encontrado para parchear."
+        fi
+
     - name: Format Generated gRPC Stubs with Black
       run: |
         source venv/bin/activate
@@ -83,15 +100,18 @@ jobs:
     - name: Run Unit Tests
       run: |
         source venv/bin/activate
-        export PYTHONPATH="." # Standard PYTHONPATH for unit tests
+        export PYTHONPATH="./app:."
+        echo "PYTHONPATH set to: $PYTHONPATH"
+        echo "Running Python sys.path and os debug info for Unit Tests..."
+        python -c "import sys; print('sys.path for Unit Tests:', sys.path); import os; print('CWD for Unit Tests:', os.getcwd()); print('Contents of ./app for Unit Tests:', os.listdir('./app'))"
         python -m unittest discover -s app/tests/unit -p "test_*.py"
 
     - name: Run Acceptance Tests (Behave)
       run: |
         source venv/bin/activate
-        export PYTHONPATH="./app:." # Modified PYTHONPATH
+        export PYTHONPATH="./app:."
         echo "PYTHONPATH set to: $PYTHONPATH"
-        echo "Running Python sys.path and os debug info..."
+        echo "Running Python sys.path and os debug info for Behave step..."
         python -c "import sys; print('sys.path for Behave step:', sys.path); import os; print('CWD for Behave step:', os.getcwd()); print('Contents of ./app for Behave step:', os.listdir('./app'))"
         echo "Iniciando servidor gRPC en segundo plano..."
         python app/main.py &
