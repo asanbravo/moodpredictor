@@ -43,18 +43,14 @@ jobs:
             ./proto/mood_predictor.proto
         echo "Stubs generados. Verificando existencia:"
         ls -l app/mood_predictor_pb2.py app/mood_predictor_pb2_grpc.py app/mood_predictor_pb2.pyi
-        # El archivo mood_predictor_pb2_grpc.pyi no siempre se genera o es estrictamente necesario.
-        # Verificamos su existencia opcionalmente sin causar un fallo en el build:
         ls -l app/mood_predictor_pb2_grpc.pyi || echo "INFO: mood_predictor_pb2_grpc.pyi no fue generado (esto puede ser normal)."
 
     - name: Format Generated gRPC Stubs with Black
       run: |
         source venv/bin/activate
         echo "Attempting to format generated gRPC stub files (.py and .pyi) if they exist..."
-        # Format .py files
         [ -f app/mood_predictor_pb2.py ] && black app/mood_predictor_pb2.py || echo "INFO: app/mood_predictor_pb2.py not found or no formatting needed."
         [ -f app/mood_predictor_pb2_grpc.py ] && black app/mood_predictor_pb2_grpc.py || echo "INFO: app/mood_predictor_pb2_grpc.py not found or no formatting needed."
-        # Format .pyi files
         [ -f app/mood_predictor_pb2.pyi ] && black app/mood_predictor_pb2.pyi || echo "INFO: app/mood_predictor_pb2.pyi not found or no formatting needed."
         [ -f app/mood_predictor_pb2_grpc.pyi ] && black app/mood_predictor_pb2_grpc.pyi || echo "INFO: app/mood_predictor_pb2_grpc.pyi not found or no formatting needed."
 
@@ -87,13 +83,16 @@ jobs:
     - name: Run Unit Tests
       run: |
         source venv/bin/activate
-        export PYTHONPATH=.
+        export PYTHONPATH="." # Standard PYTHONPATH for unit tests
         python -m unittest discover -s app/tests/unit -p "test_*.py"
 
     - name: Run Acceptance Tests (Behave)
       run: |
         source venv/bin/activate
-        export PYTHONPATH=.
+        export PYTHONPATH="./app:." # Modified PYTHONPATH
+        echo "PYTHONPATH set to: $PYTHONPATH"
+        echo "Running Python sys.path and os debug info..."
+        python -c "import sys; print('sys.path for Behave step:', sys.path); import os; print('CWD for Behave step:', os.getcwd()); print('Contents of ./app for Behave step:', os.listdir('./app'))"
         echo "Iniciando servidor gRPC en segundo plano..."
         python app/main.py &
         SERVER_PID=$!
