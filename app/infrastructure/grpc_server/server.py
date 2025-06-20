@@ -1,17 +1,15 @@
 import asyncio
 import grpc
-from app import mood_predictor_pb2  # Asumiendo que los stubs están en 'app'
-from app import mood_predictor_pb2_grpc  # Asumiendo que los stubs están en 'app'
+from app import mood_predictor_pb2
+from app import mood_predictor_pb2_grpc
 from typing import List
 from app.application.services.mood_prediction_service import MoodPredictionService
 from app.domain.value_objects.song_features import SongFeatures as DomainSongFeatures
 from app.domain.value_objects.user_mood_prediction import (
     UserMoodPrediction as DomainUserMoodPrediction,
 )
-from app.domain.value_objects.mood import Mood  # Asegurar que Mood enum se importa
-from app.infrastructure.ml_model.scikit_learn_model import (
-    ScikitLearnMoodModel,
-)  # Corrected class name
+from app.domain.value_objects.mood import Mood
+from app.infrastructure.ml_model.scikit_learn_model import ScikitLearnMoodModel
 from app.infrastructure.repositories.ml_mood_prediction_repository import (
     MLMoodPredictionRepository,
 )
@@ -26,8 +24,8 @@ class MoodPredictorServiceImpl(mood_predictor_pb2_grpc.MoodPredictorServiceServi
         request: mood_predictor_pb2.PredictUserMoodRequest,
         context: grpc.aio.ServicerContext,
     ) -> mood_predictor_pb2.PredictUserMoodResponse:
-        if not request.song_features:  # Comprobar directamente el request
-            context.abort(
+        if not request.song_features:
+            await context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT,
                 "La lista de características de canciones (song_features) no puede estar vacía.",
             )
@@ -52,9 +50,7 @@ class MoodPredictorServiceImpl(mood_predictor_pb2_grpc.MoodPredictorServiceServi
             print(
                 f"Error: global_mood no es una instancia de Mood enum: {type(domain_user_mood_prediction.global_mood)}"
             )
-            # Este log es importante, pero el abort puede ser muy genérico para el cliente.
-            # Podría ser mejor que el servicio/repositorio asegure esto o devuelva un error específico que se mapee aquí.
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.INTERNAL,
                 "Error interno al procesar la predicción del mood.",
             )
@@ -70,7 +66,6 @@ async def serve():
     model_path = "mood_model.joblib"
     dataset_for_training = "songs_dataset.csv"
 
-    # Utilizar el nombre de clase correcto ScikitLearnMoodModel
     mood_model = ScikitLearnMoodModel(
         model_path=model_path, dataset_path_for_training=dataset_for_training
     )
