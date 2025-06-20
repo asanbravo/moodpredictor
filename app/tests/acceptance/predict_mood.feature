@@ -6,7 +6,7 @@ Feature: User Mood Prediction
 
   Scenario: Global mood prediction based on the mode of individual moods
     Given the MoodPredictor server is running
-    When I send a request to predict the user's mood with the following songs:
+When I send a list of songs for mood prediction
       | song_id | tempo | energy | valence | danceability | expected_individual_mood |
       | happy_1 | 120.0 | 0.8   | 0.9     | 0.7          | Happy                    |
       | happy_2 | 130.0 | 0.85  | 0.85    | 0.75         | Happy                    |
@@ -15,7 +15,7 @@ Feature: User Mood Prediction
 
   Scenario: Global mood prediction with different individual moods
     Given the MoodPredictor server is running
-    When I send a request to predict the user's mood with the following songs:
+When I send a list of songs for mood prediction
       | song_id | tempo | energy | valence | danceability | expected_individual_mood |
       | energetic_1 | 140.0 | 0.9  | 0.7  | 0.8  | Energetic                |
       | relaxed_1   | 90.0  | 0.4  | 0.6  | 0.5  | Relaxed                  |
@@ -24,7 +24,7 @@ Feature: User Mood Prediction
 
   Scenario: Global mood prediction with a single song
     Given the MoodPredictor server is running
-    When I send a request to predict the user's mood with the following songs:
+When I send a list of songs for mood prediction
       | song_id         | tempo | energy | valence | danceability | expected_individual_mood |
       | sad_track_alone | 75.0  | 0.25   | 0.15    | 0.33         | Sad                      |
     Then the response should indicate the user's global mood is "Sad"

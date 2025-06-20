@@ -12,12 +12,11 @@ def step_impl_server_running(context):
     pass
 
 
-# Reescribir este string de step cuidadosamente:
-@when("I send a request to predict the user's mood with the following songs:")
-def step_impl_predict_with_songs(context):
+@when("I send a list of songs for mood prediction")  # MODIFIED decorator string
+def step_impl_predict_with_song_list(context):  # MODIFIED function name
     print(
-        "DEBUG CI: When step 'I send a request to predict the user's mood with the following songs:' EXECUTED."
-    )
+        "DEBUG CI: When step 'I send a list of songs for mood prediction' EXECUTED."
+    )  # MODIFIED print
     # if hasattr(context, 'table') and context.table:
     #    print(f"DEBUG CI TABLE: Rows: {len(context.table.rows)}, Headings: {context.table.headings}")
     #    for row in context.table:
